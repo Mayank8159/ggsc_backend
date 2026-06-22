@@ -1,0 +1,32 @@
+{
+  "name": "ggsc-backend",
+  "version": "1.0.0",
+  "description": "Serverless group chat backend with JWT auth",
+  "main": "src/auth/register.js",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "deploy:dev": "serverless deploy --stage dev",
+    "deploy:prod": "serverless deploy --stage prod",
+    "logs:auth": "serverless logs -f auth -t",
+    "logs:ws": "serverless logs -f websocket -t",
+    "offline": "serverless offline",
+    "package": "serverless package"
+  },
+  "dependencies": {
+    "aws-sdk": "^2.1500.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "serverless": "^3.38.0",
+    "serverless-iam-roles-per-function": "^3.2.0",
+    "serverless-offline": "^13.3.0",
+    "serverless-webpack": "^5.14.0",
+    "webpack": "^5.89.0",
+    "webpack-node-externals": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20.x"
+  }
+}

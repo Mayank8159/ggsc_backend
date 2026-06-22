@@ -1,0 +1,157 @@
+service: ggsc-chat-backend
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${env:AWS_REGION, 'us-east-1'}
+  stage: ${env:STAGE, 'dev'}
+  environment:
+    JWT_SECRET: ${env:JWT_SECRET, ''}
+    JWT_EXPIRY: ${env:JWT_EXPIRY, '7d'}
+    USERS_TABLE: ${self:service}-${self:provider.stage}-users
+    CONNECTIONS_TABLE: ${self:service}-${self:provider.stage}-connections
+    MESSAGES_TABLE: ${self:service}-${self:provider.stage}-messages
+    WS_API_ENDPOINT:
+      Fn::Join:
+        - ''
+        - - 'https://'
+          - Ref: WebsocketsApi
+          - '.execute-api.${self:provider.region}.amazonaws.com/${self:provider.stage}'
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:Query
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+            - dynamodb:UpdateItem
+          Resource:
+            - !GetAtt UsersTable.Arn
+            - !GetAtt ConnectionsTable.Arn
+            - !GetAtt MessagesTable.Arn
+            - !Join ['', [!GetAtt UsersTable.Arn, '/index/*']]
+            - !Join ['', [!GetAtt ConnectionsTable.Arn, '/index/*']]
+            - !Join ['', [!GetAtt MessagesTable.Arn, '/index/*']]
+        - Effect: Allow
+          Action: execute-api:ManageConnections
+          Resource: '*'
+
+functions:
+  register:
+    handler: src/auth/register.handler
+    events:
+      - http:
+          path: auth/register
+          method: post
+          cors: true
+
+  login:
+    handler: src/auth/login.handler
+    events:
+      - http:
+          path: auth/login
+          method: post
+          cors: true
+
+  authorizer:
+    handler: src/auth/authorizer.handler
+
+  websocket:
+    handler: src/ws/connect.handler
+    events:
+      - websocket:
+          route: $connect
+
+  disconnect:
+    handler: src/ws/disconnect.handler
+    events:
+      - websocket:
+          route: $disconnect
+
+  sendMessage:
+    handler: src/ws/sendMessage.handler
+    events:
+      - websocket:
+          route: sendMessage
+
+  defaultWs:
+    handler: src/ws/default.handler
+    events:
+      - websocket:
+          route: $default
+
+resources:
+  Resources:
+    UsersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.USERS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: email
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: EmailIndex
+            KeySchema:
+              - AttributeName: email
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+    ConnectionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.CONNECTIONS_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: connectionId
+            AttributeType: S
+          - AttributeName: groupId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: connectionId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: GroupIdIndex
+            KeySchema:
+              - AttributeName: groupId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    MessagesTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:provider.environment.MESSAGES_TABLE}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: messageId
+            AttributeType: S
+          - AttributeName: groupId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: messageId
+            KeyType: HASH
+        GlobalSecondaryIndexes:
+          - IndexName: GroupIdIndex
+            KeySchema:
+              - AttributeName: groupId
+                KeyType: HASH
+            Projection:
+              ProjectionType: ALL
+
+plugins:
+  - serverless-iam-roles-per-function

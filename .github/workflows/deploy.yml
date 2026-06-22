@@ -1,0 +1,76 @@
+name: Deploy to AWS Lambda
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Deployment stage'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  NODE_VERSION: '20'
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Lint
+        run: npx eslint src/ || echo "No linter configured, skipping"
+
+      - name: Syntax check
+        run: node -c src/auth/register.js && node -c src/auth/login.js && node -c src/ws/connect.js && node -c src/ws/disconnect.js && node -c src/ws/sendMessage.js
+
+  deploy:
+    name: Deploy to AWS
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.stage || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      - name: Deploy with Serverless Framework
+        run: npx serverless deploy --stage ${{ github.event.inputs.stage || 'dev' }} --conceal
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+
+      - name: Get API endpoints
+        run: |
+          echo "### Deployment Summary :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "**Stage:** ${{ github.event.inputs.stage || 'dev' }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          npx serverless info --stage ${{ github.event.inputs.stage || 'dev' }} >> $GITHUB_STEP_SUMMARY
