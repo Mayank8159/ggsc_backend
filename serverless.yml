@@ -153,5 +153,8 @@ resources:
             Projection:
               ProjectionType: ALL
 
-plugins:
-  - serverless-iam-roles-per-function
+# Removed serverless-iam-roles-per-function; all functions share the provider-level IAM role
+# for consistent DynamoDB permissions. If per-function roles are needed later, add
+# explicit iamRoleStatements to each function.
+# plugins:
+#   - serverless-iam-roles-per-function

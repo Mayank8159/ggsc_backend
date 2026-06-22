@@ -5,22 +5,27 @@ exports.handler = async (event) => {
   try {
     const token = event.queryStringParameters?.token
     if (!token) {
-      return { statusCode: 401, body: 'Missing token' }
+      return { statusCode: 401 }
     }
 
     const decoded = verifyToken(token)
     if (!decoded) {
-      return { statusCode: 401, body: 'Invalid or expired token' }
+      return { statusCode: 401 }
     }
 
-    const { connectionId } = event.requestContext
+    const connectionId = event.requestContext?.connectionId
+    if (!connectionId) {
+      console.error('Missing connectionId in requestContext')
+      return { statusCode: 500 }
+    }
+
     const groupId = event.queryStringParameters?.groupId || 'default'
 
     await saveConnection(connectionId, decoded.userId, groupId)
 
-    return { statusCode: 200, body: JSON.stringify({ connectionId, groupId }) }
+    return { statusCode: 200 }
   } catch (err) {
-    console.error('Connect error:', err)
-    return { statusCode: 500, body: 'Connect failed' }
+    console.error('$connect failed:', err)
+    return { statusCode: 500 }
   }
 }
